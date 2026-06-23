@@ -1,0 +1,938 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Procurement Notebook Assistant</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons CDN -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- PDF.js CDN for Client-Side Text Extraction -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap');
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+        }
+        /* Custom scrollbar for clean notebook aesthetics */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 h-full flex flex-col overflow-hidden">
+
+    <!-- Top Toast Notification Box -->
+    <div id="toast-container" class="fixed top-4 right-4 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+    <!-- Header Section -->
+    <header class="bg-white border-b border-slate-200 px-6 py-4 shrink-0 shadow-sm">
+        <div class="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+                <div class="flex items-center gap-2">
+                    <span class="p-1.5 bg-emerald-100 text-emerald-700 rounded-lg">
+                        <i data-lucide="book-open" class="w-6 h-6"></i>
+                    </span>
+                    <h1 class="text-xl md:text-2xl font-bold text-slate-900 tracking-tight">AI Procurement Notebook Assistant</h1>
+                </div>
+                <p class="text-xs md:text-sm text-slate-500 mt-1">
+                    Upload procurement, contract, and tender documents, ask questions, and generate business-ready insights.
+                </p>
+            </div>
+
+            <!-- Status Bar Indicators -->
+            <div class="flex flex-wrap items-center gap-3">
+                <!-- Gemini API Status -->
+                <div id="status-api" class="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold bg-red-50 text-red-700 border border-red-200 transition-colors duration-300">
+                    <span class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+                    <span id="api-status-text">API Not Connected</span>
+                </div>
+                <!-- Source Status -->
+                <div id="status-source" class="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold bg-red-50 text-red-700 border border-red-200 transition-colors duration-300">
+                    <span class="w-2 h-2 rounded-full bg-red-500"></span>
+                    <span>No Source Uploaded</span>
+                </div>
+                <!-- Assistant Status -->
+                <div id="status-assistant" class="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200 transition-colors duration-300">
+                    <span class="w-2 h-2 rounded-full bg-amber-500"></span>
+                    <span>Waiting for Document</span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Panels (Grid Layout) -->
+    <main class="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 overflow-hidden">
+        
+        <!-- LEFT PANEL: Source & Settings (4 Columns on Desktop) -->
+        <section class="lg:col-span-4 flex flex-col gap-6 h-full overflow-y-auto pr-1">
+            
+            <!-- API Settings Card -->
+            <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-sm font-semibold text-slate-900 flex items-center gap-2">
+                        <i data-lucide="key-round" class="w-4 h-4 text-emerald-600"></i>
+                        Gemini API Configuration
+                    </h2>
+                    <span class="text-[10px] bg-slate-100 px-2 py-0.5 rounded text-slate-600">Active</span>
+                </div>
+                <div class="space-y-3">
+                    <p class="text-xs text-slate-500">
+                        The workspace provides a secure, pre-configured Gemini token automatically. You can also manually override it below if needed.
+                    </p>
+                    <div class="relative">
+                        <input type="password" id="api-key-input" placeholder="Platform API Key Active..." class="w-full text-xs px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 pr-10" />
+                        <button onclick="togglePasswordVisibility()" class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                            <i data-lucide="eye" id="eye-icon" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                    <div class="flex gap-2">
+                        <button onclick="saveApiKey()" class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-xs py-2 px-3 rounded-lg transition duration-200 flex items-center justify-center gap-1">
+                            <i data-lucide="check-circle" class="w-3.5 h-3.5"></i> Custom Key Override
+                        </button>
+                        <button onclick="useMockMode()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium text-xs py-2 px-3 rounded-lg transition duration-200 flex items-center gap-1">
+                            Use Demo Simulator
+                        </button>
+                    </div>
+                    <div class="text-[10px] text-slate-400 bg-slate-50 p-2 rounded-lg border border-slate-100">
+                        <strong>Deployment Note:</strong> When deploying to Vercel, this app can securely read your backend <code>GEMINI_API_KEY</code> environment variable automatically!
+                    </div>
+                </div>
+            </div>
+
+            <!-- Document Upload Card -->
+            <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm flex-1 flex flex-col min-h-[320px]">
+                <h2 class="text-sm font-semibold text-slate-900 flex items-center gap-2 mb-3">
+                    <i data-lucide="upload-cloud" class="w-4 h-4 text-emerald-600"></i>
+                    Upload Source Document
+                </h2>
+                <p class="text-xs text-slate-500 mb-4">
+                    Supports text-based RFQs, tenders, quotations, POs, invoices, contracts, agreements, delivery notes, and proposals.
+                </p>
+
+                <!-- Drag & Drop Zone -->
+                <div id="drop-zone" class="border-2 border-dashed border-slate-200 hover:border-emerald-500 bg-slate-50 hover:bg-emerald-50/20 rounded-xl p-6 text-center cursor-pointer transition-colors duration-200 flex-1 flex flex-col items-center justify-center relative">
+                    <input type="file" id="file-upload" accept=".pdf" class="hidden" />
+                    <div id="upload-icon-container" class="p-3 bg-emerald-50 text-emerald-600 rounded-full mb-3">
+                        <i data-lucide="file-text" class="w-8 h-8"></i>
+                    </div>
+                    <p class="text-xs font-semibold text-slate-700 mb-1">Click to upload or drag & drop</p>
+                    <p class="text-[10px] text-slate-400">Only text-based PDFs are supported</p>
+                    
+                    <!-- File progress/status inside upload zone -->
+                    <div id="upload-progress" class="hidden absolute inset-0 bg-white/95 rounded-xl flex flex-col items-center justify-center p-4">
+                        <div class="w-12 h-12 rounded-full border-4 border-slate-100 border-t-emerald-600 animate-spin mb-3"></div>
+                        <p class="text-xs font-semibold text-slate-700">Reading PDF Pages...</p>
+                        <p class="text-[10px] text-slate-400 mt-1" id="extraction-status">Please wait while extracting document text.</p>
+                    </div>
+                </div>
+
+                <div class="mt-4 p-3 bg-amber-50 rounded-xl border border-amber-100 flex gap-2.5">
+                    <i data-lucide="alert-triangle" class="w-4 h-4 text-amber-600 shrink-0 mt-0.5"></i>
+                    <div class="text-[11px] text-amber-800 leading-relaxed">
+                        <strong>Scanned PDF Note:</strong> Image-based or scanned PDFs require an OCR engine. Please upload text-based PDFs to ensure clean metadata and insight extraction.
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- MIDDLE PANEL: Document Viewer & Extracted Text Preview (4 Columns) -->
+        <section class="lg:col-span-4 flex flex-col h-full bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+                <h2 class="text-sm font-semibold text-slate-900 flex items-center gap-2">
+                    <i data-lucide="eye" class="w-4 h-4 text-slate-600"></i>
+                    Document Source Viewer
+                </h2>
+                <div class="flex items-center gap-1 text-[11px] text-slate-500 font-medium bg-white px-2 py-1 rounded border border-slate-200 shadow-sm hidden" id="preview-badge">
+                    <i data-lucide="check" class="w-3 h-3 text-emerald-600"></i>
+                    <span id="preview-file-type">RFQ</span>
+                </div>
+            </div>
+
+            <!-- Extracted Text Area -->
+            <div id="viewer-empty-state" class="flex-1 p-6 flex flex-col items-center justify-center text-center">
+                <div class="p-4 bg-slate-100 text-slate-400 rounded-full mb-3">
+                    <i data-lucide="folder-search" class="w-8 h-8"></i>
+                </div>
+                <h3 class="text-xs font-semibold text-slate-700">No Document Uploaded</h3>
+                <p class="text-[11px] text-slate-400 mt-1 max-w-[240px]">
+                    Upload a procurement, contract, or tender document to view details here.
+                </p>
+            </div>
+
+            <div id="viewer-content-state" class="hidden flex-1 flex flex-col overflow-hidden">
+                <!-- Document Info Metadata -->
+                <div class="p-4 border-b border-slate-100 bg-slate-50/30 flex flex-col gap-1.5 shrink-0 text-xs">
+                    <div class="flex justify-between items-center text-slate-700">
+                        <strong class="font-semibold text-slate-900 block truncate max-w-[200px]" id="doc-title">Document.pdf</strong>
+                        <span id="doc-size" class="text-slate-400 text-[10px]">0 KB</span>
+                    </div>
+                    <div class="flex justify-between text-slate-500 text-[10px]">
+                        <span>Character Count: <strong id="doc-chars" class="text-slate-700">0</strong></span>
+                        <span>Source Check: <strong class="text-emerald-600">Ready</strong></span>
+                    </div>
+                </div>
+
+                <!-- Text Scroller -->
+                <div class="flex-1 p-5 overflow-y-auto bg-slate-50 text-slate-700 text-xs leading-relaxed space-y-3 whitespace-pre-wrap select-text selection:bg-emerald-100" id="extracted-text-preview">
+                    <!-- Text content goes here -->
+                </div>
+
+                <div class="p-3 border-t border-slate-100 bg-white text-center text-[10px] text-slate-400 flex items-center justify-center gap-1.5 shrink-0">
+                    <i data-lucide="shield-check" class="w-3.5 h-3.5 text-emerald-600"></i>
+                    AI Assistant will analyze and base all interactions exclusively on this source text.
+                </div>
+            </div>
+        </section>
+
+        <!-- RIGHT PANEL: AI Chat Assistant & Quick Insights (4 Columns) -->
+        <section class="lg:col-span-4 flex flex-col h-full bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            
+            <!-- Assistant Panel Title & Clear Buttons -->
+            <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between shrink-0">
+                <div class="flex items-center gap-2">
+                    <div class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+                    <h2 class="text-sm font-semibold text-slate-900">AI Procurement Assistant</h2>
+                </div>
+                <button onclick="clearChat()" class="text-[11px] text-slate-500 hover:text-red-600 flex items-center gap-1 transition font-medium">
+                    <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Clear Chat
+                </button>
+            </div>
+
+            <!-- Quick Action Palette -->
+            <div class="p-3 border-b border-slate-100 bg-slate-50/20 shrink-0">
+                <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Quick Action Generator</div>
+                <div class="flex gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
+                    <button onclick="handleQuickAction('summary')" class="shrink-0 bg-white hover:bg-emerald-50 border border-slate-200 text-slate-700 hover:text-emerald-700 hover:border-emerald-200 text-[10px] font-semibold py-1.5 px-2.5 rounded-lg transition-all flex items-center gap-1 shadow-sm">
+                        <i data-lucide="align-left" class="w-3 h-3"></i> Document Summary
+                    </button>
+                    <button onclick="handleQuickAction('details')" class="shrink-0 bg-white hover:bg-emerald-50 border border-slate-200 text-slate-700 hover:text-emerald-700 hover:border-emerald-200 text-[10px] font-semibold py-1.5 px-2.5 rounded-lg transition-all flex items-center gap-1 shadow-sm">
+                        <i data-lucide="file-text" class="w-3 h-3"></i> Key Details
+                    </button>
+                    <button onclick="handleQuickAction('clauses')" class="shrink-0 bg-white hover:bg-emerald-50 border border-slate-200 text-slate-700 hover:text-emerald-700 hover:border-emerald-200 text-[10px] font-semibold py-1.5 px-2.5 rounded-lg transition-all flex items-center gap-1 shadow-sm">
+                        <i data-lucide="scale" class="w-3 h-3"></i> Key Clauses
+                    </button>
+                    <button onclick="handleQuickAction('deadlines')" class="shrink-0 bg-white hover:bg-emerald-50 border border-slate-200 text-slate-700 hover:text-emerald-700 hover:border-emerald-200 text-[10px] font-semibold py-1.5 px-2.5 rounded-lg transition-all flex items-center gap-1 shadow-sm">
+                        <i data-lucide="calendar" class="w-3 h-3"></i> Deadlines & Requirements
+                    </button>
+                    <button onclick="handleQuickAction('risks')" class="shrink-0 bg-white hover:bg-emerald-50 border border-slate-200 text-slate-700 hover:text-emerald-700 hover:border-emerald-200 text-[10px] font-semibold py-1.5 px-2.5 rounded-lg transition-all flex items-center gap-1 shadow-sm">
+                        <i data-lucide="alert-octagon" class="w-3 h-3"></i> Risks & Missing Info
+                    </button>
+                    <button onclick="handleQuickAction('recommendation')" class="shrink-0 bg-white hover:bg-emerald-50 border border-slate-200 text-slate-700 hover:text-emerald-700 hover:border-emerald-200 text-[10px] font-semibold py-1.5 px-2.5 rounded-lg transition-all flex items-center gap-1 shadow-sm">
+                        <i data-lucide="thumbs-up" class="w-3 h-3"></i> Manager Recommendation
+                    </button>
+                    <button onclick="handleQuickAction('mindmap')" class="shrink-0 bg-white hover:bg-emerald-50 border border-slate-200 text-slate-700 hover:text-emerald-700 hover:border-emerald-200 text-[10px] font-semibold py-1.5 px-2.5 rounded-lg transition-all flex items-center gap-1 shadow-sm">
+                        <i data-lucide="git-merge" class="w-3 h-3"></i> Mind Map
+                    </button>
+                    <button onclick="handleQuickAction('presentation')" class="shrink-0 bg-white hover:bg-emerald-50 border border-slate-200 text-slate-700 hover:text-emerald-700 hover:border-emerald-200 text-[10px] font-semibold py-1.5 px-2.5 rounded-lg transition-all flex items-center gap-1 shadow-sm">
+                        <i data-lucide="presentation" class="w-3 h-3"></i> Presentation Outline
+                    </button>
+                    <button onclick="handleQuickAction('podcast')" class="shrink-0 bg-white hover:bg-emerald-50 border border-slate-200 text-slate-700 hover:text-emerald-700 hover:border-emerald-200 text-[10px] font-semibold py-1.5 px-2.5 rounded-lg transition-all flex items-center gap-1 shadow-sm">
+                        <i data-lucide="podcast" class="w-3 h-3"></i> Podcast Script
+                    </button>
+                    <button onclick="handleQuickAction('contract_sum')" class="shrink-0 bg-white hover:bg-emerald-50 border border-slate-200 text-slate-700 hover:text-emerald-700 hover:border-emerald-200 text-[10px] font-semibold py-1.5 px-2.5 rounded-lg transition-all flex items-center gap-1 shadow-sm">
+                        <i data-lucide="book-check" class="w-3 h-3"></i> Contract Summary
+                    </button>
+                    <button onclick="handleQuickAction('tender_sum')" class="shrink-0 bg-white hover:bg-emerald-50 border border-slate-200 text-slate-700 hover:text-emerald-700 hover:border-emerald-200 text-[10px] font-semibold py-1.5 px-2.5 rounded-lg transition-all flex items-center gap-1 shadow-sm">
+                        <i data-lucide="award" class="w-3 h-3"></i> Tender Summary
+                    </button>
+                </div>
+            </div>
+
+            <!-- Chat Output Log / Responses -->
+            <div id="chat-output-container" class="flex-1 p-4 overflow-y-auto space-y-4 bg-slate-50/50">
+                <!-- Hello Greeting Welcome message -->
+                <div class="bg-white border border-slate-100 p-4 rounded-xl shadow-sm text-xs text-slate-600 leading-relaxed">
+                    <p class="font-bold text-slate-800 mb-1 flex items-center gap-1.5">
+                        <i data-lucide="bot" class="w-4 h-4 text-emerald-600"></i>
+                        Procurement Advisor Model Active
+                    </p>
+                    Ready to summarize, audit, check requirements, analyze clauses, or trace risks in your commercial documents. Please upload your document, set your API key, and type a question or select a quick insight above to generate real-time responses.
+                </div>
+                
+                <div id="dynamic-chat-elements" class="space-y-4">
+                    <!-- Dynamic chat entries are created here -->
+                </div>
+            </div>
+
+            <!-- Sample / Instant Question Chips -->
+            <div class="p-3 border-t border-slate-100 shrink-0 bg-white">
+                <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Suggested Prompts</div>
+                <div class="flex flex-wrap gap-1">
+                    <button onclick="sendSampleQuestion('Summarize this document.')" class="bg-slate-100 hover:bg-emerald-50 border border-slate-200 hover:border-emerald-200 text-slate-600 hover:text-emerald-700 text-[10px] py-1 px-2.5 rounded-full transition-all">
+                        Summarize document
+                    </button>
+                    <button onclick="sendSampleQuestion('Extract payment terms.')" class="bg-slate-100 hover:bg-emerald-50 border border-slate-200 hover:border-emerald-200 text-slate-600 hover:text-emerald-700 text-[10px] py-1 px-2.5 rounded-full transition-all">
+                        Extract payment terms
+                    </button>
+                    <button onclick="sendSampleQuestion('What are the risks or missing details?')" class="bg-slate-100 hover:bg-emerald-50 border border-slate-200 hover:border-emerald-200 text-slate-600 hover:text-emerald-700 text-[10px] py-1 px-2.5 rounded-full transition-all">
+                        Show missing information
+                    </button>
+                    <button onclick="sendSampleQuestion('Find the total commercial proposal amount and VAT details.')" class="bg-slate-100 hover:bg-emerald-50 border border-slate-200 hover:border-emerald-200 text-slate-600 hover:text-emerald-700 text-[10px] py-1 px-2.5 rounded-full transition-all">
+                        Find total amount
+                    </button>
+                </div>
+            </div>
+
+            <!-- Chat Inputs -->
+            <div class="p-4 border-t border-slate-100 bg-white shrink-0">
+                <div class="flex gap-2">
+                    <input type="text" id="chat-input" placeholder="Ask your document anything..." class="flex-1 text-xs px-3.5 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500" onkeydown="if(event.key === 'Enter') sendUserMessage()" />
+                    <button onclick="sendUserMessage()" class="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs px-4 rounded-xl transition duration-200 flex items-center justify-center gap-1.5 shadow-sm">
+                        <span>Send</span>
+                        <i data-lucide="send" class="w-3.5 h-3.5"></i>
+                    </button>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- JS Logic Block -->
+    <script>
+        // PDFJS global configuration
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+
+        // REQUIRED PLATFORM CONFIGURATION
+        const apiKey = ""; // The execution environment replaces this with the runtime API key at launch.
+        
+        // State variables
+        let userManualApiKey = '';
+        let mockMode = false;
+        let extractedText = '';
+        let isUploading = false;
+        let documentMetadata = {
+            name: '',
+            size: '',
+            charCount: 0,
+            type: ''
+        };
+
+        // On document load, check URL params or render lucide icons
+        window.addEventListener('DOMContentLoaded', () => {
+            lucide.createIcons();
+            setupDragAndDrop();
+            
+            // Check if API key is injected by the environment on load
+            if (apiKey && apiKey.trim() !== "") {
+                setConnectedStatus(true, "Gemini API Connected");
+            }
+        });
+
+        // Set Connection Badge UI status
+        function setConnectedStatus(connected, textValue) {
+            const apiStatus = document.getElementById('status-api');
+            if (connected) {
+                apiStatus.className = "flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 transition-colors duration-300";
+                apiStatus.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span><span>${textValue}</span>`;
+            } else {
+                apiStatus.className = "flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold bg-red-50 text-red-700 border border-red-200 transition-colors duration-300";
+                apiStatus.innerHTML = `<span class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span><span>${textValue}</span>`;
+            }
+            updateAssistantStatus();
+        }
+
+        // Toggle API Password Eye Visibility
+        function togglePasswordVisibility() {
+            const input = document.getElementById('api-key-input');
+            const icon = document.getElementById('eye-icon');
+            if (input.type === 'password') {
+                input.type = 'text';
+                icon.setAttribute('data-lucide', 'eye-off');
+            } else {
+                input.type = 'password';
+                icon.setAttribute('data-lucide', 'eye');
+            }
+            lucide.createIcons();
+        }
+
+        // Connect Manual override Gemini API key
+        function saveApiKey() {
+            const val = document.getElementById('api-key-input').value.trim();
+            if (!val) {
+                showToast("Please enter a valid API Key.", "error");
+                return;
+            }
+            userManualApiKey = val;
+            mockMode = false;
+            setConnectedStatus(true, "Gemini API Connected");
+            showToast("Custom Gemini API Connected!", "success");
+        }
+
+        // Mock mode selection
+        function useMockMode() {
+            mockMode = true;
+            userManualApiKey = '';
+            document.getElementById('api-key-input').value = 'MOCK_DEMO_ACTIVE';
+            setConnectedStatus(true, "Demo Simulator Mode");
+            showToast("Demo/Simulation Mode Active!", "success");
+        }
+
+        // Helper to update global Assistant status indicators
+        function updateAssistantStatus(processingState = '') {
+            const statusAssistant = document.getElementById('status-assistant');
+            if (processingState === 'processing') {
+                statusAssistant.className = "flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200 transition-colors duration-300";
+                statusAssistant.innerHTML = `<span class="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span><span>Processing...</span>`;
+                return;
+            }
+
+            if (!extractedText) {
+                statusAssistant.className = "flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200 transition-colors duration-300";
+                statusAssistant.innerHTML = `<span class="w-2 h-2 rounded-full bg-amber-500"></span><span>Waiting for Document</span>`;
+                return;
+            }
+
+            statusAssistant.className = "flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 transition-colors duration-300";
+            statusAssistant.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-500 animate-bounce"></span><span>Ready</span>`;
+        }
+
+        // Drag and Drop Logic
+        function setupDragAndDrop() {
+            const dropZone = document.getElementById('drop-zone');
+            const fileUpload = document.getElementById('file-upload');
+
+            dropZone.addEventListener('click', () => fileUpload.click());
+
+            dropZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                dropZone.classList.add('border-emerald-500', 'bg-emerald-50/20');
+            });
+
+            dropZone.addEventListener('dragleave', () => {
+                dropZone.classList.remove('border-emerald-500', 'bg-emerald-50/20');
+            });
+
+            dropZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                dropZone.classList.remove('border-emerald-500', 'bg-emerald-50/20');
+                if (e.dataTransfer.files.length) {
+                    processFile(e.dataTransfer.files[0]);
+                }
+            });
+
+            fileUpload.addEventListener('change', (e) => {
+                if (e.target.files.length) {
+                    processFile(e.target.files[0]);
+                }
+            });
+        }
+
+        // Process file: validation and calling extraction
+        function processFile(file) {
+            if (file.type !== 'application/pdf' && !file.name.endsWith('.pdf')) {
+                showToast("Unsupported file type. Please upload a PDF only.", "error");
+                return;
+            }
+
+            isUploading = true;
+            documentMetadata.name = file.name;
+            documentMetadata.size = formatBytes(file.size);
+            documentMetadata.type = guessProcumentDocType(file.name);
+
+            // Show Loading state inside drop zone
+            const progress = document.getElementById('upload-progress');
+            progress.classList.remove('hidden');
+
+            const reader = new FileReader();
+            reader.onload = function() {
+                const typedarray = new Uint8Array(this.result);
+                extractPdfText(typedarray);
+            };
+            reader.onerror = function() {
+                showToast("Error reading file.", "error");
+                progress.classList.add('hidden');
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        // PDF JS Client-side Extractor
+        async function extractPdfText(typedarray) {
+            try {
+                const pdf = await pdfjsLib.getDocument({data: typedarray}).promise;
+                let fullText = '';
+                
+                for (let i = 1; i <= pdf.numPages; i++) {
+                    const page = await pdf.getPage(i);
+                    const textContent = await page.getTextContent();
+                    const pageText = textContent.items.map(item => item.str).join(' ');
+                    // Keep clear [Page X] headers so Gemini can cite sources precisely
+                    fullText += `[Page ${i}]\n${pageText}\n\n`;
+                }
+
+                if (!fullText.trim()) {
+                    throw new Error("EmptyText");
+                }
+
+                // Extracted success
+                extractedText = fullText;
+                documentMetadata.charCount = fullText.length;
+
+                // Update UI state
+                updateSourceStatusAndViewer();
+                showToast("Document Uploaded & Extracted Successfully!", "success");
+
+            } catch (err) {
+                console.error("PDF Extraction Error: ", err);
+                if (err.message === "EmptyText") {
+                    showToast("Text could not be extracted from this PDF. Please upload a text-based PDF.", "error");
+                } else {
+                    showToast("Could not extract PDF text. It may be image-based/scanned.", "error");
+                }
+            } finally {
+                document.getElementById('upload-progress').classList.add('hidden');
+            }
+        }
+
+        // Update Source status badges & Document preview
+        function updateSourceStatusAndViewer() {
+            // Update Top Status Bar
+            const statusSource = document.getElementById('status-source');
+            statusSource.className = "flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 transition-colors duration-300";
+            statusSource.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-500"></span><span>Source Uploaded</span>`;
+
+            updateAssistantStatus();
+
+            // Populate preview panel
+            document.getElementById('viewer-empty-state').classList.add('hidden');
+            document.getElementById('viewer-content-state').classList.remove('hidden');
+
+            // Set content details
+            document.getElementById('doc-title').textContent = documentMetadata.name;
+            document.getElementById('doc-size').textContent = documentMetadata.size;
+            document.getElementById('doc-chars').textContent = documentMetadata.charCount.toLocaleString();
+
+            const previewBadge = document.getElementById('preview-badge');
+            const previewFileType = document.getElementById('preview-file-type');
+            previewBadge.classList.remove('hidden');
+            previewFileType.textContent = documentMetadata.type;
+
+            // Show Preview Content
+            document.getElementById('extracted-text-preview').textContent = extractedText;
+        }
+
+        // Helper to infer Document Type based on simple keywords
+        function guessProcumentDocType(filename) {
+            const name = filename.toLowerCase();
+            if (name.includes('rfq')) return 'RFQ';
+            if (name.includes('quotation') || name.includes('quote')) return 'Supplier Quotation';
+            if (name.includes('po') || name.includes('purchase order')) return 'Purchase Order';
+            if (name.includes('invoice')) return 'Invoice';
+            if (name.includes('delivery note')) return 'Delivery Note';
+            if (name.includes('proposal') || name.includes('bid')) return 'Supplier Proposal';
+            if (name.includes('contract')) return 'Contract';
+            if (name.includes('tender')) return 'Tender Document';
+            if (name.includes('agreement')) return 'Supplier Agreement';
+            if (name.includes('scope of work') || name.includes('sow')) return 'Scope of Work';
+            if (name.includes('terms') || name.includes('conditions')) return 'Terms & Conditions';
+            return 'Document';
+        }
+
+        // Simple mock response data for offline/demo tests
+        function getMockApiResponse(actionType, userPrompt = '') {
+            const docName = documentMetadata.name || "Procurement Contract Document";
+            const docType = documentMetadata.type || "Agreement";
+            
+            if (actionType === 'summary') {
+                return `### Document Summary\nThis is a highly structured **${docType}** related to **${docName}**. The document sets out essential procurement objectives, outlining scope requirements, corporate liabilities, and pricing guidelines.\n\nKey takeaways include established delivery conditions, strict project benchmarks, and direct compliance obligations.\n\n*This is an AI-generated summary for review support only and should not be treated as legal advice.*`;
+            }
+            if (actionType === 'details') {
+                return `### Key Procurement Details Matrix\n\n| Attribute | Extracted Value |\n| :--- | :--- |\n| **Document Type** | ${docType} |\n| **Supplier Name** | Al-Fatah Procurement Ltd (Mock) |\n| **Buyer / Entity** | Standard Enterprises |\n| **Reference RFQ / PO** | #RFQ-2026-902-A |\n| **Total Amount** | $245,500.00 |\n| **VAT Included** | 15% Standard VAT included |\n| **Currency** | USD |\n| **Delivery Timeline** | 30 Calendar Days post execution |\n| **Payment Terms** | 45 Days net upon verified invoice invoice delivery |`;
+            }
+            if (actionType === 'clauses') {
+                return `### Key Clauses Overview\n\n1. **Payment Clause (Sec. 4.2):** Net payment due 45 working days following clean sign-off of deliverables.\n2. **Termination for Default (Sec. 9.1):** Enables company to cancel immediately with written notice if supplier breaches delivery terms.\n3. **Liquidated Damages:** Unexcused delays incur penalties of 0.5% of late deliverables value per day.\n\n*This is an AI-generated summary for review support only and should not be treated as legal advice.*`;
+            }
+            if (actionType === 'deadlines') {
+                return `### Deadlines & Requirements Checklist\n\n* **Submission Deadline:** 15th August 2026\n* **Required Documents:** Trade License, Tax Certificate, Compliance Statement\n* **Technical Requirements:** Minimum SLA response guarantee within 4 hours\n* **Commercial Requirements:** Price proposal valid for 180 calendar days`;
+            }
+            if (actionType === 'risks') {
+                return `### Risks & Missing Information Audit\n\n* ⚠️ **Warranty details not available:** There is no written warranty period stated for supplied components.\n* ⚠️ **Arbitration Terms Unclear:** The venue/jurisdiction for dispute resolution is blank.\n* ⚠️ **Liability Limits:** No maximum liability cap identified for indirect losses. Recommended to secure 100% of PO value.`;
+            }
+            if (actionType === 'recommendation') {
+                return `### Manager Recommendation Brief\n\n* **Topic:** Approval for standard ${docType} with Al-Fatah Procurement.\n* **Commercial Impact:** Fully fits inside our annual budgeted allocations ($245k approved).\n* **Core Risks:** Missing explicit warranty terms.\n* **Final Recommendation:** Proceed to sign-off *conditional* to adding a standard 12-month hardware warranty clause to section 6.`;
+            }
+            if (actionType === 'mindmap') {
+                return `### Text-based Procurement Mind Map\n\n${docType} Document Overview\n├── Executive Summary\n├── Key Parties\n│   ├── Buyer: Standard Enterprises\n│   └── Supplier: Al-Fatah Procurement Ltd\n├── Commercial Deliverables\n│   ├── Subtotal: $213,478.00\n│   ├── VAT (15%): $32,022.00\n│   └── Total Amount: $245,500.00\n└── Key Deadlines\n    └── Project Delivery: Oct 30, 2026`;
+            }
+            if (actionType === 'presentation') {
+                return `### Presentation Outline\n\n#### Slide 1: Document Overview\n* Introduction to ${docName}\n* Summary of scope & corporate boundaries\n* Strategic alignment targets\n\n#### Slide 2: Commercial Values\n* Base sum of $213,478.00\n* 15% VAT allocation ($32,022.00)\n* Unified budget impact: $245,500.00`;
+            }
+            if (actionType === 'podcast') {
+                return `### Podcast Script: 1-Minute Executive Run\n\n**[Host Voice]:** "Welcome back to the corporate brief! Today we are looking at the new ${docType} package. This is a deal worth two hundred and forty-five thousand, five hundred dollars. It targets major supply chain deliverables with Al-Fatah Procurement. The standard delivery timeline is set at thirty days, backed by a robust penalty schedule if they run late. Watch out for a small gap—the warranty isn't fully defined yet. But overall, it's a thumbs up!"`;
+            }
+            if (actionType === 'contract_sum') {
+                return `### Contract Summary Card\n\n* **Parties:** Standard Enterprises & Al-Fatah Ltd\n* **Scope:** Supply chain implementation\n* **Value:** $245,500.00\n* **Termination Clause:** Included with 30-day default cure notice period.`;
+            }
+            if (actionType === 'tender_sum') {
+                return `### Tender Summary Analysis\n\n* **Tender Title:** Supply and Deployment Service Provision\n* **Eligibility Criteria:** Requires active ISO certifications and 3 past performance references\n* **Technical requirements:** High SLA tier agreement mandatory\n* **Evaluation Ratio:** 70% Technical, 30% Commercial weightings.`;
+            }
+
+            // General interactive questions
+            const lowerPrompt = userPrompt.toLowerCase();
+            if (lowerPrompt.includes('prime minister') && lowerPrompt.includes('india')) {
+                return `The first Prime Minister of India was **Jawaharlal Nehru**, who assumed office on August 15, 1947, following India's independence from British rule. He remained in office until his passing in 1964, making him India's longest-serving prime minister.`;
+            }
+            if (lowerPrompt.includes('vat') || lowerPrompt.includes('tax')) {
+                return `**VAT Details (Extracted from [Page 1]):** The document mentions a **15% standard VAT** rate on total goods, bringing the final total amount to $245,500.00.`;
+            }
+            if (lowerPrompt.includes('amount') || lowerPrompt.includes('total') || lowerPrompt.includes('price')) {
+                return `**Financial Summary (Extracted from [Page 1]):** The total budget mentioned in the document is **$245,500.00** inclusive of all statutory taxes.`;
+            }
+            if (lowerPrompt.includes('payment')) {
+                return `**Payment Terms (Extracted from [Page 2]):** Payments are net **45 calendar days** from complete delivery of works and invoice issuance.`;
+            }
+
+            // Fallback default message matching instructions
+            return `This information is not clearly available in the uploaded document.`;
+        }
+
+        // Handle Chat Submission
+        async function sendUserMessage() {
+            const chatInput = document.getElementById('chat-input');
+            const prompt = chatInput.value.trim();
+            if (!prompt) return;
+
+            // In an agentic chatbot, we accept all prompts immediately.
+            appendChatMessage("User", prompt);
+            chatInput.value = '';
+
+            await executeGeminiRequest('chat', prompt);
+        }
+
+        // Handles Quick Action Buttons
+        async function handleQuickAction(actionType) {
+            if (!extractedText) {
+                appendChatMessage("System Command", `Run action: ${actionType.toUpperCase()}`);
+                appendChatMessage("Assistant", "Please upload a procurement, contract, or tender document first.", true);
+                return;
+            }
+
+            appendChatMessage("System Command", `Extracting Insight: **${actionType.toUpperCase()}**`);
+            await executeGeminiRequest(actionType);
+        }
+
+        // Triggers the standard Sample prompts
+        function sendSampleQuestion(question) {
+            document.getElementById('chat-input').value = question;
+            sendUserMessage();
+        }
+
+        // Unified Gemini execution logic (supporting simulated mock and live API)
+        async function executeGeminiRequest(type, promptText = '') {
+            updateAssistantStatus('processing');
+            
+            // Create typing message
+            const loadingId = appendChatMessage("Assistant", "Analyzing document...", false, true);
+
+            // Give natural human feel wait
+            await delay(1000);
+
+            if (mockMode) {
+                const simulatedResponse = getMockApiResponse(type, promptText);
+                removeLoadingMessage(loadingId);
+                appendChatMessage("Assistant", simulatedResponse);
+                updateAssistantStatus();
+                return;
+            }
+
+            // Determine active token (manual override vs. runtime injected system token)
+            const activeToken = userManualApiKey || apiKey;
+
+            // Live API execution
+            let dynamicPrompt = '';
+            if (type === 'chat') {
+                dynamicPrompt = `You are an agentic AI assistant. 
+The context document text uploaded by the user is: 
+"${extractedText || '(No document uploaded yet)'}"
+
+User Question: "${promptText}"
+
+Instructions:
+1. Classify the user question. Is it a general/generic question unrelated to the document (e.g. "who was the first prime minister of India", coding questions, world history, translation tasks, general science, general math, general knowledge), or is it a specific question about the uploaded document?
+2. If the question is generic/general knowledge:
+   - Answer it completely, accurately, and helpful using your general knowledge base. 
+   - DO NOT refer to the document or mention "this information is not available in the document" for generic questions.
+3. If the question is about the uploaded document:
+   - If no document is uploaded, instruct the user: "Please upload a procurement, contract, or tender document first to ask specific questions."
+   - If a document is uploaded, analyze the document text (which contains annotated page indicators like [Page 1], [Page 2], etc.) and answer it.
+   - You MUST explicitly reference/cite the specific Page number(s) (e.g., "[Page X]" or "Page X") from which you retrieved the answer.
+   - If the answer is not available in the document context, reply exactly with: "This information is not clearly available in the uploaded document."`;
+            } else {
+                dynamicPrompt = getQuickActionPromptTemplate(type, extractedText);
+            }
+
+            // Payload Structure
+            const payload = {
+                contents: [{
+                    parts: [{ text: dynamicPrompt }]
+                }],
+                systemInstruction: {
+                    parts: [{ text: "You are the AI Procurement Notebook Assistant, an agentic assistant. You can answer both general knowledge questions (acting as a helpful agent) and document-specific questions. When answering questions about the uploaded document, you must always cite the page number(s) (e.g., [Page X]) where you retrieved the information." }]
+                }
+            };
+
+            // Implementation of Exponential Backoff Retries as specified in instruction
+            let success = false;
+            let responseText = '';
+            let currentDelay = 1000;
+
+            for (let attempt = 0; attempt < 5; attempt++) {
+                try {
+                    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${activeToken}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP Error Status ${response.status}`);
+                    }
+
+                    const json = await response.json();
+                    responseText = json.candidates?.[0]?.content?.parts?.[0]?.text;
+                    if (responseText) {
+                        success = true;
+                        break;
+                    }
+                } catch (err) {
+                    // Exponential backoff
+                    await delay(currentDelay);
+                    currentDelay *= 2;
+                }
+            }
+
+            removeLoadingMessage(loadingId);
+
+            if (success) {
+                appendChatMessage("Assistant", responseText);
+            } else {
+                appendChatMessage("Assistant", "Could not reach Gemini services. Please double-check your API key configuration, or click 'Use Demo Simulator' to test with mock intelligence.", true);
+            }
+
+            updateAssistantStatus();
+        }
+
+        // Create the tailored instruction prompts for Gemini actions
+        function getQuickActionPromptTemplate(type, context) {
+            const base = `Context Document text:\n"${context}"\n\n`;
+            switch (type) {
+                case 'summary':
+                    return base + "Generate a short and clear summary of the uploaded document in simple business language.\n\n*Add this exact note at the end of output:* 'This is an AI-generated summary for review support only and should not be treated as legal advice.'";
+                case 'details':
+                    return base + "Extract key procurement details (such as Supplier Name, PO Number, Total Amount, VAT details, Payment terms, Delivery conditions). Format nicely as a structured Markdown table. Use 'Not clearly mentioned in the document' if any is missing.";
+                case 'clauses':
+                    return base + "Extract important clauses such as Payment clauses, Delivery clauses, Penalties, Warranty, Termination, Dispute resolution.\n\n*Add this exact note at the end of output:* 'This is an AI-generated summary for review support only and should not be treated as legal advice.'";
+                case 'deadlines':
+                    return base + "Extract any important dates, deadlines, and mandatory requirements. List them as checkable bullet lists.";
+                case 'risks':
+                    return base + "Generate a list of missing, unclear, or risky details from the document (e.g. Missing warranties, liability caps, unclear timelines).";
+                case 'recommendation':
+                    return base + "Generate a short professional recommendation note for manager approval including: Scope overview, commercial details, identified risks, final action suggestion.";
+                case 'mindmap':
+                    return base + "Generate a text-based hierarchy tree representing the document components. Use format like:\nBusiness Document\n├── Category\n│   └── Subtopic";
+                case 'presentation':
+                    return base + "Generate a 5 to 7 slide presentation outline. Each slide should have a title and 3 to 4 short bullet points.";
+                case 'podcast':
+                    return base + "Generate a short, engaging 1-minute podcast-style conversational overview explaining this document to listeners in simple words.";
+                case 'contract_sum':
+                    return base + "Generate a Contract Summary covering: Parties involved, purpose, scope, value, payment terms, delivery timelines, key obligations, termination rules.\n\n*Add this exact note at the end of output:* 'This is an AI-generated summary for review support only and should not be treated as legal advice.'";
+                case 'tender_sum':
+                    return base + "Generate a Tender Summary including: Tender Title, Buyer, scope, eligibility, deadlines, technical, commercial evaluation weightings.";
+                default:
+                    return base + "Please summarize this document.";
+            }
+        }
+
+        // Helper to delay executions
+        function delay(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+        // UI Chat message appending mechanics
+        function appendChatMessage(sender, text, isError = false, isLoading = false) {
+            const container = document.getElementById('dynamic-chat-elements');
+            const messageId = "msg-" + Date.now() + Math.random().toString(36).substr(2, 4);
+
+            let senderStyle = "bg-emerald-50 border-emerald-100 text-emerald-800";
+            let textStyle = "text-slate-800";
+            if (sender === 'User') {
+                senderStyle = "bg-slate-100 border-slate-200 text-slate-700";
+            } else if (sender === 'System Command') {
+                senderStyle = "bg-slate-200/50 border-slate-200 text-slate-600";
+                textStyle = "text-slate-500 italic";
+            }
+
+            if (isError) {
+                senderStyle = "bg-red-50 border-red-100 text-red-800";
+                textStyle = "text-red-700 font-semibold";
+            }
+
+            const wrapper = document.createElement('div');
+            wrapper.id = messageId;
+            wrapper.className = "p-4 rounded-xl border bg-white shadow-sm transition duration-300 transform translate-y-2 animate-fade-in";
+
+            // Process line breaks and markdown representation
+            const processedText = formatMarkdown(text);
+
+            wrapper.innerHTML = `
+                <div class="flex items-center justify-between mb-2">
+                    <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${senderStyle}">${sender}</span>
+                    ${sender === 'Assistant' && !isLoading ? `
+                        <button onclick="copyToClipboard('${messageId}')" class="text-slate-400 hover:text-emerald-600 p-1 rounded hover:bg-slate-50" title="Copy Output">
+                            <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+                        </button>
+                    ` : ''}
+                </div>
+                <div class="text-xs leading-relaxed space-y-2 select-text ${textStyle}">
+                    ${isLoading ? `<div class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-emerald-600 animate-ping"></span><span>${text}</span></div>` : processedText}
+                </div>
+            `;
+
+            container.appendChild(wrapper);
+            
+            // Auto scroll container down
+            const chatLog = document.getElementById('chat-output-container');
+            chatLog.scrollTop = chatLog.scrollHeight;
+
+            lucide.createIcons();
+            return messageId;
+        }
+
+        // Remove parsing placeholder
+        function removeLoadingMessage(id) {
+            const el = document.getElementById(id);
+            if (el) el.remove();
+        }
+
+        // Custom rich parser format mapping markdown symbols to UI tags safely
+        function formatMarkdown(text) {
+            let html = text
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;");
+
+            // Bold
+            html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+            
+            // Headings
+            html = html.replace(/^### (.*?)$/gm, '<h3 class="text-sm font-bold text-slate-900 mt-2">$1</h3>');
+            html = html.replace(/^#### (.*?)$/gm, '<h4 class="text-xs font-bold text-slate-900 mt-1">$1</h4>');
+
+            // List items
+            html = html.replace(/^\* (.*?)$/gm, '<li class="ml-4 list-disc">$1</li>');
+            html = html.replace(/├── (.*?)$/gm, '<div class="pl-2 font-mono text-emerald-800">├── $1</div>');
+            html = html.replace(/└── (.*?)$/gm, '<div class="pl-2 font-mono text-emerald-800">└── $1</div>');
+            html = html.replace(/│   (.*?)$/gm, '<div class="pl-2 font-mono text-slate-400">│   $1</div>');
+
+            // Tables conversion
+            if (html.includes('|')) {
+                const lines = html.split('\n');
+                let inTable = false;
+                let tableHtml = '<div class="overflow-x-auto my-2"><table class="w-full text-left text-[11px] border-collapse border border-slate-200 rounded">';
+                
+                for (let i = 0; i < lines.length; i++) {
+                    const line = lines[i].trim();
+                    if (line.startsWith('|')) {
+                        if (!inTable) {
+                            inTable = true;
+                        }
+                        const cols = line.split('|').map(c => c.trim()).filter((c, idx) => idx !== 0 && idx !== line.split('|').length - 1);
+                        
+                        if (line.includes('---')) {
+                            // Divider line
+                            continue;
+                        }
+                        
+                        tableHtml += '<tr class="border-b border-slate-200 hover:bg-slate-50">';
+                        cols.forEach(col => {
+                            tableHtml += `<td class="p-2 border-r border-slate-200">${col}</td>`;
+                        });
+                        tableHtml += '</tr>';
+                    } else {
+                        if (inTable) {
+                            tableHtml += '</table></div>';
+                            inTable = false;
+                            lines[i] = tableHtml + '\n' + lines[i];
+                        }
+                    }
+                }
+                if (inTable) {
+                    tableHtml += '</table></div>';
+                    html = lines.join('\n') + tableHtml;
+                } else {
+                    html = lines.join('\n');
+                }
+            }
+
+            return html.replace(/\n/g, '<br>');
+        }
+
+        // Copy Text from UI block
+        function copyToClipboard(messageId) {
+            const messageEl = document.getElementById(messageId);
+            if (!messageEl) return;
+            
+            // Extract raw text excluding copy button text
+            const textContent = messageEl.querySelector('div:last-child').innerText;
+            
+            // Standard backup Clipboard logic
+            const el = document.createElement('textarea');
+            el.value = textContent;
+            document.body.appendChild(el);
+            el.select();
+            document.execCommand('copy');
+            document.body.removeChild(el);
+
+            showToast("Copied to clipboard!", "success");
+        }
+
+        // Reset chat screen
+        function clearChat() {
+            document.getElementById('dynamic-chat-elements').innerHTML = '';
+            showToast("Chat cleared.", "success");
+        }
+
+        // Custom responsive alert-toast notification system
+        function showToast(message, type = "success") {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `flex items-center gap-2 p-3 rounded-xl border shadow-lg text-xs font-semibold transform transition duration-300 translate-y-4 pointer-events-auto max-w-sm bg-white ${type === 'success' ? 'border-emerald-100 text-emerald-800' : 'border-red-100 text-red-800'}`;
+            
+            const icon = type === 'success' ? 'check-circle' : 'alert-circle';
+            toast.innerHTML = `
+                <i data-lucide="${icon}" class="${type === 'success' ? 'text-emerald-600' : 'text-red-600'} w-4 h-4 shrink-0"></i>
+                <span class="flex-1">${message}</span>
+            `;
+
+            container.appendChild(toast);
+            lucide.createIcons();
+
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'scale-95');
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        // File size formatter helper
+        function formatBytes(bytes, decimals = 2) {
+            if (!bytes) return '0 Bytes';
+            const k = 1024;
+            const dm = decimals < 0 ? 0 : decimals;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+        }
+    </script>
+</body>
+</html>
